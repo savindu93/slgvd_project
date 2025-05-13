@@ -426,17 +426,79 @@ export default function ResultsTable({results}){
     const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - rows.length) : 0;
 
     // Downloading results 
-    const handleDownload = async (rows) => {
+    const [type,setType] = useState("csv");
+
+    const handleType = (e) => {
+        setType(e.target.value)
+    }
+    
+    // Method to download the results in CSV or VCF format
+    const handleDownload = async (rows, combinedData, type) => {
 
         console.log(rows);
 
-        const requestOptions = {
+        let requestOptions = {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({data: rows, type: "csv"}),
+            body:null ,
             responseType: 'blob',
         }
 
+        if (type == 'csv'){
+            requestOptions.body = JSON.stringify({data: rows, type: "csv"})
+
+        }
+        else if (type == 'vcf'){
+            console.log("VCF")
+
+            const data = []
+
+            if (db == 'ssv'){
+
+                combinedData.forEach(
+                    ({chromosome, position, variation_id, ref_allele, alt_allele,homo_count, het_count, consequence}) =>
+                        {
+                            const af = ((homo_count * 2 + het_count)/ (tot_individuals * 2)).toPrecision(4)
+                            const info = `CONSEQUENCE=${consequence.replace(/[ /]/g,"_")};AF=${af}`
+                            data.push({
+                                chromosome,
+                                position,
+                                variation_id,
+                                ref_allele,
+                                alt_allele,
+                                info
+                            })
+                        }
+                )
+
+                console.log(data)
+
+                requestOptions.body = JSON.stringify({data: data, type: "vcf", db: "ssv"})
+            }
+
+            if (db == "gcnv"){
+
+                combinedData.forEach(
+                    ({chromosome, start_pos, end_pos, variation_id, consequence, site_count }) =>
+                        {
+                            const sf = (site_count / tot_individuals).toPrecision(4)
+                            const info = `END=${end_pos};CONSEQUENCE=${consequence.replace(/[ /]/g,"_")};SF=${sf}`
+                            data.push({
+                                chromosome,
+                                start_pos,
+                                variation_id,
+                                info
+                            })
+                            
+                        }
+                )
+
+                console.log(data)
+                requestOptions.body = JSON.stringify({data: data, type: "vcf", db: "gcnv"})
+            }
+
+        }
+        
         try{
 
             const response = await api.post('/api/download/',requestOptions);
@@ -445,13 +507,13 @@ export default function ResultsTable({results}){
 
             if(response.status == 200){
                 
-                const blob = new Blob([response.data], {type: 'text/csv'})
+                const blob = new Blob([response.data], {type: `text/${type}`})
                 const url = window.URL.createObjectURL(blob);
 
                 const a = document.createElement('a')
                 a.style.display = 'none';
                 a.href = url;
-                a.download = 'results.csv';
+                a.download = `results.${type}`;
 
                 document.body.appendChild(a);
                 a.click();
@@ -465,6 +527,7 @@ export default function ResultsTable({results}){
             alert(error)
         }
     }
+
     
     return (
 
@@ -546,6 +609,24 @@ export default function ResultsTable({results}){
 
                     </Button>:null
 
+                }
+
+                {rows ? 
+                
+                    <Select
+                        onChange = {handleType}
+                        value = {type}
+                        size = 'small'
+                        sx = {{mt: 2}}
+                    >
+    
+                        <MenuItem value = 'csv'> CSV
+                        </MenuItem>
+                        <MenuItem value = 'vcf'> VCF
+                        </MenuItem>
+    
+                    </Select> : null
+            
                 }
 
                            
