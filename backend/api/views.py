@@ -1107,6 +1107,11 @@ class Download(APIView):
         print(data)
 
         type = json.loads(data['body'])['type']
+        print(type)
+
+        db = json.loads(data['body']).get('db')
+        print(db)
+
 
         # Allow downloading data that are displayed in the results table
         if type == "csv":
@@ -1119,7 +1124,37 @@ class Download(APIView):
 
             writer.writeheader()
             writer.writerows(content)
+        
+        elif type == 'vcf':
+            response = HttpResponse(content_type='text/vcf')
+            response['Content-Disposition'] = 'attachment; filename="results.vcf"'
 
+            response.write("##fileformat=VCFv4.2\n")
+
+            if db == 'ssv':
+                response.write("##INFO=<ID=CONSEQUENCE,Number=1,Type=String,Description=\"Variant Consequence\">\n")
+                response.write("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Allele Frequency\">\n")
+
+                response.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+
+                for row in content:
+                    info = row.get('info','.')
+                    line = f"{row['chromosome']}\t{row['position']}\t{row['variation_id']}\t{row['ref_allele']}\t{row['alt_allele']}\t.\t.\t{info}\n"
+                    response.write(line)
+
+            
+            if db == 'gcnv':
+                response.write("##INFO=<ID=END,Number=1,Type=String,Description=\"End Position\">\n")
+                response.write("##INFO=<ID=CONSEQUENCE,Number=1,Type=String,Description=\"Variant Consequence\">\n")
+                response.write("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Site Frequency\">\n")
+
+                response.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+
+                for row in content:
+                    info = row.get('info','.')
+                    line = f"{row['chromosome']}\t{row['start_pos']}\t{row['variation_id']}\tN\t.\t.\t.\t{info}\n"
+                    response.write(line)
+    
         # Enable downloading of the submission log after a successful submission
         # of data to the database
         elif type == 'txt/plain':
